@@ -9,3 +9,5 @@ Always refer to TODO.md for the current tasks to be done. If something is not li
 When you complete a task, mark it as done in TODO.md. When it is complete, we will issue a PR in GitHub.
 
 Ensure all new code is well tested. Add unit tests and integration tests as needed.
+
+Always create new features in a feature branch prefixed with "feature/". For example, "feature/add-logging".
