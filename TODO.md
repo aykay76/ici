@@ -16,11 +16,18 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
 
 - [ ] **Podman Integration**
   - [x] Implement `CreateContainer()` in `internal/container/podman.go` (now returns container ID)
-  - [ ] Pull container images (ubuntu:22.04, etc.)
+  - [x] Pull container images (ubuntu:22.04, etc.)
   - [ ] Start containers with proper configuration
   - [x] Implement `RunCommand()` to execute shell commands in containers
   - [x] Implement `RemoveContainer()` for cleanup
   - [ ] Handle container lifecycle (start, stop, remove)
+
+  # Potential enhancements (non-blocking)
+  - [ ] Add pull policy option (e.g., `always`, `missing`, `never`) to control when images are pulled
+  - [ ] Implement image caching / local registry mirror support to reduce pull latency
+  - [ ] Support authenticated registries (credential helper or registry login flow)
+  - [ ] Add parallel pre-pull step to warm images for large workflows
+  - [ ] Surface pull progress (and retry/backoff) for better UX and resilience
 
 - [ ] **Basic Step Execution**
   - [ ] Execute `run:` steps in containers
