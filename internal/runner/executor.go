@@ -73,8 +73,10 @@ func (e *Executor) runJob(jobID string, job parser.Job) error {
 	if err != nil {
 		return fmt.Errorf("failed to create container for job %s: %w", jobID, err)
 	}
-	// Ensure cleanup
+	// Ensure cleanup: stop then remove the container explicitly so lifecycle is clear.
 	defer func() {
+		// best-effort stop; ignore error to prefer removal
+		_ = mgr.StopContainer(containerID)
 		_ = mgr.RemoveContainer(containerID)
 	}()
 

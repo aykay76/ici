@@ -274,3 +274,35 @@ func (m *Manager) RemoveContainer(containerID string) error {
 
 	return nil
 }
+
+// StartContainer starts an existing container by ID or name.
+func (m *Manager) StartContainer(containerID string) error {
+	if m.verbose {
+		fmt.Printf("Starting container: %s\n", containerID)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	if err := m.runCmdCapture(m.cli, "start", containerID); err != nil {
+		return fmt.Errorf("failed to start container %s: %w", containerID, err)
+	}
+
+	return nil
+}
+
+// StopContainer stops a running container by ID or name.
+func (m *Manager) StopContainer(containerID string) error {
+	if m.verbose {
+		fmt.Printf("Stopping container: %s\n", containerID)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	if err := m.runCmdCapture(m.cli, "stop", containerID); err != nil {
+		return fmt.Errorf("failed to stop container %s: %w", containerID, err)
+	}
+
+	return nil
+}

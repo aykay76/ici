@@ -20,7 +20,7 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
   - [x] Start containers with proper configuration
   - [x] Implement `RunCommand()` to execute shell commands in containers
   - [x] Implement `RemoveContainer()` for cleanup
-  - [ ] Handle container lifecycle (start, stop, remove)
+  - [x] Handle container lifecycle (start, stop, remove)
 
   Notes / Enhancements:
   - Implemented `ContainerConfig` and `CreateContainerWithConfig` (env, volumes, workdir, user).
