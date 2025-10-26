@@ -15,11 +15,11 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
 ### High Priority
 
 - [ ] **Podman Integration**
-  - [ ] Implement `CreateContainer()` in `internal/container/podman.go`
+  - [x] Implement `CreateContainer()` in `internal/container/podman.go` (now returns container ID)
   - [ ] Pull container images (ubuntu:22.04, etc.)
   - [ ] Start containers with proper configuration
-  - [ ] Implement `RunCommand()` to execute shell commands in containers
-  - [ ] Implement `RemoveContainer()` for cleanup
+  - [x] Implement `RunCommand()` to execute shell commands in containers
+  - [x] Implement `RemoveContainer()` for cleanup
   - [ ] Handle container lifecycle (start, stop, remove)
 
 - [ ] **Basic Step Execution**
@@ -28,6 +28,8 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
   - [ ] Handle step failures and exit codes
   - [ ] Display step output in real-time
   - [ ] Implement step timeout handling
+
+Note: Unit tests for the container manager were added (tests stub CLI behavior and validate create/exec/remove). Integration tests remain as a follow-up.
 
 - [ ] **Environment Variables**
   - [ ] Parse workflow-level `env:`
