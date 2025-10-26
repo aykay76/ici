@@ -19,7 +19,7 @@ A Podman-based local GitHub Actions runner with AI-powered pre-flight analysis t
 
 ### Prerequisites
 
-- Go 1.23 or later
+- Go 1.25 or later
 - Podman installed and configured
 
 ### Build from Source
