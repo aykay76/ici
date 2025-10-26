@@ -51,6 +51,24 @@ func (m *Manager) MapRunsOn(runsOn string) (string, error) {
 	return "", fmt.Errorf("unsupported runs-on: %s", runsOn)
 }
 
+// PullImage pulls the given image using the detected container CLI (podman or docker).
+// This is a convenience method exposed so callers can ensure images are available
+// before creating containers.
+func (m *Manager) PullImage(image string) error {
+	if m.verbose {
+		fmt.Printf("Pulling image: %s\n", image)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	if err := m.runCmdCapture(m.cli, "pull", image); err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", image, err)
+	}
+
+	return nil
+}
+
 // CreateContainer creates a new Podman (or Docker) container and returns its ID.
 // It pulls the image, creates the container (keeps it running) and starts it.
 func (m *Manager) CreateContainer(image string, name string) (string, error) {
@@ -62,8 +80,8 @@ func (m *Manager) CreateContainer(image string, name string) (string, error) {
 	}
 
 	// 1. Pull image
-	if err := m.runCmdCapture(m.cli, "pull", image); err != nil {
-		return "", fmt.Errorf("failed to pull image %s: %w", image, err)
+	if err := m.PullImage(image); err != nil {
+		return "", err
 	}
 
 	// 2. Create container and capture returned container ID

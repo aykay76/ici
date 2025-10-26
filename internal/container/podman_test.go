@@ -88,3 +88,40 @@ func TestRemoveContainer_Succeeds(t *testing.T) {
 		t.Fatalf("RemoveContainer failed: %v", err)
 	}
 }
+
+func TestPullImage_Succeeds(t *testing.T) {
+	old := execCommand
+	defer func() { execCommand = old }()
+	execCommand = fakeExec
+
+	m := NewManager(false)
+	m.cli = "podman"
+
+	if err := m.PullImage("ubuntu:22.04"); err != nil {
+		t.Fatalf("PullImage failed: %v", err)
+	}
+}
+
+// fakeFailExec simulates a failing pull command.
+func fakeFailExec(name string, args ...string) *exec.Cmd {
+	full := strings.Join(append([]string{name}, args...), " ")
+	if strings.Contains(full, " pull ") {
+		// return a command that prints an error message and exits non-zero
+		return exec.Command("sh", "-c", "echo failed pull >&2; exit 2")
+	}
+	// fallback to success for other commands
+	return exec.Command("sh", "-c", "exit 0")
+}
+
+func TestPullImage_Failure(t *testing.T) {
+	old := execCommand
+	defer func() { execCommand = old }()
+	execCommand = fakeFailExec
+
+	m := NewManager(false)
+	m.cli = "podman"
+
+	if err := m.PullImage("nonexistent:image"); err == nil {
+		t.Fatalf("expected PullImage to fail for nonexistent image")
+	}
+}

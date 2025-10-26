@@ -16,7 +16,7 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
 
 - [ ] **Podman Integration**
   - [x] Implement `CreateContainer()` in `internal/container/podman.go` (now returns container ID)
-  - [ ] Pull container images (ubuntu:22.04, etc.)
+  - [x] Pull container images (ubuntu:22.04, etc.)
   - [ ] Start containers with proper configuration
   - [x] Implement `RunCommand()` to execute shell commands in containers
   - [x] Implement `RemoveContainer()` for cleanup
