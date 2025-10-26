@@ -17,10 +17,16 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
 - [ ] **Podman Integration**
   - [x] Implement `CreateContainer()` in `internal/container/podman.go` (now returns container ID)
   - [x] Pull container images (ubuntu:22.04, etc.)
-  - [ ] Start containers with proper configuration
+  - [x] Start containers with proper configuration
   - [x] Implement `RunCommand()` to execute shell commands in containers
   - [x] Implement `RemoveContainer()` for cleanup
   - [ ] Handle container lifecycle (start, stop, remove)
+
+  Notes / Enhancements:
+  - Implemented `ContainerConfig` and `CreateContainerWithConfig` (env, volumes, workdir, user).
+  - Added unit test `internal/container/podman_config_test.go`.
+  - Runner now creates a container per job and executes `run:` steps inside it (basic wiring).
+  - Future enhancements: mount workspace into containers, support step-level env/working-directory, add pull policy (always/missing/never), and add integration tests for Podman.
 
   # Potential enhancements (non-blocking)
   - [ ] Add pull policy option (e.g., `always`, `missing`, `never`) to control when images are pulled

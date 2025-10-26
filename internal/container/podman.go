@@ -109,6 +109,80 @@ func (m *Manager) CreateContainer(image string, name string) (string, error) {
 	return containerID, nil
 }
 
+// ContainerConfig holds options for creating a container with specific runtime
+// configuration. Fields are intentionally simple and map directly to common
+// CLI flags for Podman/Docker.
+type ContainerConfig struct {
+	// Env holds environment variables to set in the container (KEY=VALUE).
+	Env []string
+	// Volumes holds bind mounts in the form hostpath:containerpath[:ro|:rw]
+	Volumes []string
+	// WorkDir sets container working directory (-w)
+	WorkDir string
+	// User sets the user inside the container (--user)
+	User string
+}
+
+// CreateContainerWithConfig creates and starts a container using the provided
+// configuration options. It keeps the existing CreateContainer(image, name)
+// behavior intact; callers that don't need a config may continue using it.
+func (m *Manager) CreateContainerWithConfig(image string, name string, cfg *ContainerConfig) (string, error) {
+	if m.verbose {
+		fmt.Printf("Creating container with config: %s (image: %s)\n", name, image)
+	}
+	if m.cli == "" {
+		return "", errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// Pull image first
+	if err := m.PullImage(image); err != nil {
+		return "", err
+	}
+
+	// Build create args with configuration flags
+	args := []string{"create", "--name", name}
+
+	if cfg != nil {
+		for _, e := range cfg.Env {
+			// Use --env KEY=VALUE for portability
+			args = append(args, "--env", e)
+		}
+		for _, v := range cfg.Volumes {
+			args = append(args, "-v", v)
+		}
+		if cfg.WorkDir != "" {
+			args = append(args, "-w", cfg.WorkDir)
+		}
+		if cfg.User != "" {
+			args = append(args, "--user", cfg.User)
+		}
+	}
+
+	// Keep the container running by default
+	args = append(args, image, "tail", "-f", "/dev/null")
+
+	out, err := m.runCmdOutput(m.cli, args...)
+	if err != nil {
+		return "", fmt.Errorf("failed to create container %s from image %s: %w", name, image, err)
+	}
+	containerID := strings.TrimSpace(out)
+	if containerID == "" {
+		containerID = name
+	}
+
+	// Start
+	if err := m.runCmdCapture(m.cli, "start", containerID); err != nil {
+		_ = m.runCmdCapture(m.cli, "rm", "-f", containerID)
+		return "", fmt.Errorf("failed to start container %s: %w", containerID, err)
+	}
+
+	if m.verbose {
+		fmt.Printf("Container %s started (via %s) with config\n", containerID, m.cli)
+	}
+
+	return containerID, nil
+}
+
 // runCmdCapture runs a command and returns error with stderr/stdout combined on failure.
 func (m *Manager) runCmdCapture(name string, args ...string) error {
 	if m.verbose {
