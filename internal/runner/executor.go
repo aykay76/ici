@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 
+	"github.com/aykay76/ici/internal/container"
 	"github.com/aykay76/ici/internal/parser"
 )
 
@@ -51,9 +52,33 @@ func (e *Executor) runJob(jobID string, job parser.Job) error {
 		fmt.Printf("Steps: %d\n", len(job.Steps))
 	}
 
-	// TODO: Create container based on runs-on
-	// TODO: Execute each step
+	// Create container based on runs-on
+	mgr := container.NewManager(e.verbose)
+	image, err := mgr.MapRunsOn(job.GetRunsOn())
+	if err != nil {
+		return fmt.Errorf("failed to map runs-on for job %s: %w", jobID, err)
+	}
 
+	// Build a simple ContainerConfig: pass job-level env into the container.
+	cfg := &container.ContainerConfig{}
+	if len(job.Env) > 0 {
+		envs := make([]string, 0, len(job.Env))
+		for k, v := range job.Env {
+			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+		}
+		cfg.Env = envs
+	}
+
+	containerID, err := mgr.CreateContainerWithConfig(image, jobID, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create container for job %s: %w", jobID, err)
+	}
+	// Ensure cleanup
+	defer func() {
+		_ = mgr.RemoveContainer(containerID)
+	}()
+
+	// Execute each step inside the container
 	for i, step := range job.Steps {
 		if e.verbose {
 			fmt.Printf("\nStep %d: %s\n", i+1, step.Name)
@@ -62,6 +87,12 @@ func (e *Executor) runJob(jobID string, job parser.Job) error {
 			}
 			if step.Run != "" {
 				fmt.Printf("  Run: %s\n", step.Run)
+			}
+		}
+
+		if step.Run != "" {
+			if err := mgr.RunCommand(containerID, step.Run); err != nil {
+				return fmt.Errorf("step %d failed: %w", i+1, err)
 			}
 		}
 	}
