@@ -2,9 +2,7 @@ name: Go test
 
 on:
   push:
-    branches: [ main, master, 'feature/**' ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ 'feature/**' ]
 
 jobs:
   test:
