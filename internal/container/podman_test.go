@@ -89,6 +89,23 @@ func TestRemoveContainer_Succeeds(t *testing.T) {
 	}
 }
 
+func TestStartStopContainer_Succeeds(t *testing.T) {
+	old := execCommand
+	defer func() { execCommand = old }()
+	execCommand = fakeExec
+
+	m := NewManager(false)
+	m.cli = "podman"
+
+	if err := m.StartContainer("fake-id"); err != nil {
+		t.Fatalf("StartContainer failed: %v", err)
+	}
+
+	if err := m.StopContainer("fake-id"); err != nil {
+		t.Fatalf("StopContainer failed: %v", err)
+	}
+}
+
 func TestPullImage_Succeeds(t *testing.T) {
 	old := execCommand
 	defer func() { execCommand = old }()
