@@ -59,10 +59,10 @@ Note: Unit tests for the container manager were added (tests stub CLI behavior a
   - Run command accepts optional `--secrets` flag for custom secrets file location
   - Comprehensive unit tests for secrets store and executor env merging
 
-- [ ] **Working Directory Support**
-  - [ ] Mount workspace directory into containers
-  - [ ] Handle `working-directory` in steps
-  - [ ] Ensure proper path mapping between host and container
+- [x] **Working Directory Support**
+  - [x] Mount workspace directory into containers
+  - [x] Handle `working-directory` in steps
+  - [x] Ensure proper path mapping between host and container
 
 ### Medium Priority
 

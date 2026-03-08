@@ -169,7 +169,6 @@ go build -o ici ./cmd/ici
 - [ ] Action resolution
 - [ ] actions/checkout implementation
 - [ ] Action caching
-- [ ] Working directory in steps
 
 ### Phase 3: Advanced Features
 - [ ] Private repository support
