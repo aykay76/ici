@@ -7,17 +7,28 @@ import (
 
 	"github.com/aykay76/ici/internal/container"
 	"github.com/aykay76/ici/internal/parser"
+	"github.com/aykay76/ici/internal/secrets"
 )
 
 // Executor handles workflow execution
 type Executor struct {
-	verbose bool
+	verbose     bool
+	secretsFile string
 }
 
 // NewExecutor creates a new workflow executor
 func NewExecutor(verbose bool) *Executor {
 	return &Executor{
-		verbose: verbose,
+		verbose:     verbose,
+		secretsFile: "", // Use default location
+	}
+}
+
+// NewExecutorWithSecrets creates a new workflow executor with a custom secrets file location
+func NewExecutorWithSecrets(verbose bool, secretsFile string) *Executor {
+	return &Executor{
+		verbose:     verbose,
+		secretsFile: secretsFile,
 	}
 }
 
@@ -64,7 +75,23 @@ func (e *Executor) runJob(workflow *parser.Workflow, jobID string, job parser.Jo
 	// Build a simple ContainerConfig: pass job-level env into the container and mount the current workspace.
 	cfg := &container.ContainerConfig{}
 
-	// Merge workflow, job env into the container config env (workflow-level env first, then job)
+	// Load secrets from the local secret store
+	var secretStore secrets.Store
+	if e.secretsFile != "" {
+		secretStore = secrets.NewFileStore(e.secretsFile)
+	} else {
+		secretStore = secrets.DefaultStore()
+	}
+	storedSecrets, err := secretStore.GetAll()
+	if err != nil {
+		// Log but continue - missing secrets file is not fatal
+		if e.verbose {
+			fmt.Printf("Warning: could not load secrets: %v\n", err)
+		}
+	}
+
+	// Merge workflow, job env, and secrets into the container config env
+	// Order: workflow env -> job env -> step env -> stored secrets (secrets can override)
 	envMap := map[string]string{}
 	if workflow.Env != nil {
 		for k, v := range workflow.Env {
@@ -76,12 +103,21 @@ func (e *Executor) runJob(workflow *parser.Workflow, jobID string, job parser.Jo
 			envMap[k] = v
 		}
 	}
+	// Add stored secrets (can override env vars)
+	for k, v := range storedSecrets {
+		envMap[k] = v
+	}
+
 	if len(envMap) > 0 {
 		envs := make([]string, 0, len(envMap))
 		for k, v := range envMap {
 			envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 		}
 		cfg.Env = envs
+		if e.verbose {
+			fmt.Printf("Environment variables loaded: %d (workflow) + %d (job) + %d (secrets)\n",
+				len(workflow.Env), len(job.Env), len(storedSecrets))
+		}
 	}
 
 	// Mount the host's current working directory into the container at /workspace

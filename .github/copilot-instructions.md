@@ -6,8 +6,9 @@ Always make code changes on a new branch. When done, commit with a detailed mess
 
 Always refer to TODO.md for the current tasks to be done. If something is not listed there, do not do it.
 
-When you complete a task, mark it as done in TODO.md. When it is complete, we will issue a PR in GitHub.
+When you complete a task, mark it as done in TODO.md. When it is complete, we will issue a PR in GitHub. Also update README.md with any new features or changes to existing features.
 
 Ensure all new code is well tested. Add unit tests and integration tests as needed.
 
 Always create new features in a feature branch prefixed with "feature/". For example, "feature/add-logging".
+

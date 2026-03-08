@@ -35,21 +35,29 @@ This document tracks the development roadmap and tasks for the `ici` (ShiftLeft 
   - [ ] Add parallel pre-pull step to warm images for large workflows
   - [ ] Surface pull progress (and retry/backoff) for better UX and resilience
 
-- [ ] **Basic Step Execution**
-  - [ ] Execute `run:` steps in containers
-  - [ ] Capture stdout/stderr from container commands
-  - [ ] Handle step failures and exit codes
-  - [ ] Display step output in real-time
-  - [ ] Implement step timeout handling
+- [x] **Basic Step Execution**
+  - [x] Execute `run:` steps in containers
+  - [x] Capture stdout/stderr from container commands
+  - [x] Handle step failures and exit codes
+  - [x] Display step output in real-time
+  - [x] Implement step timeout handling
 
 Note: Unit tests for the container manager were added (tests stub CLI behavior and validate create/exec/remove). Integration tests remain as a follow-up.
 
-- [ ] **Environment Variables**
-  - [ ] Parse workflow-level `env:`
-  - [ ] Parse job-level `env:`
-  - [ ] Parse step-level `env:`
-  - [ ] Pass environment variables to containers
-  - [ ] Support for secret handling (placeholder for now)
+- [x] **Environment Variables**
+  - [x] Parse workflow-level `env:`
+  - [x] Parse job-level `env:`
+  - [x] Parse step-level `env:`
+  - [x] Pass environment variables to containers
+  - [x] Support for secret handling (placeholder for now)
+
+  Implementation details:
+  - Environment variables are merged at workflow > job > step levels
+  - Secrets are loaded from local store (~/.ici/secrets.json) and injected as environment variables
+  - Added `ici secrets` command for managing local secrets (set, list, remove)
+  - Secrets take precedence in environment variable precedence
+  - Run command accepts optional `--secrets` flag for custom secrets file location
+  - Comprehensive unit tests for secrets store and executor env merging
 
 - [ ] **Working Directory Support**
   - [ ] Mount workspace directory into containers

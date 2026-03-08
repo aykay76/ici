@@ -22,9 +22,10 @@ Examples:
 }
 
 var (
-	jobName   string
-	eventName string
-	dryRun    bool
+	jobName     string
+	eventName   string
+	dryRun      bool
+	secretsFile string
 )
 
 func init() {
@@ -32,17 +33,22 @@ func init() {
 	runCmd.Flags().StringVarP(&jobName, "job", "j", "", "specific job to run (default: all jobs)")
 	runCmd.Flags().StringVarP(&eventName, "event", "e", "push", "event that triggers the workflow")
 	runCmd.Flags().BoolVar(&dryRun, "dry-run", false, "parse and plan without executing")
+	runCmd.Flags().StringVar(&secretsFile, "secrets", "", "path to secrets file (uses ~/.ici/secrets.json by default)")
 }
 
 func runWorkflow(cmd *cobra.Command, args []string) error {
 	workflowFile := args[0]
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	secretsFile, _ := cmd.Flags().GetString("secrets")
 
 	if verbose {
 		fmt.Printf("Running workflow: %s\n", workflowFile)
 		fmt.Printf("Event: %s\n", eventName)
 		if jobName != "" {
 			fmt.Printf("Job: %s\n", jobName)
+		}
+		if secretsFile != "" {
+			fmt.Printf("Secrets file: %s\n", secretsFile)
 		}
 	}
 
@@ -63,6 +69,11 @@ func runWorkflow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Execute the workflow
-	executor := runner.NewExecutor(verbose)
+	var executor *runner.Executor
+	if secretsFile != "" {
+		executor = runner.NewExecutorWithSecrets(verbose, secretsFile)
+	} else {
+		executor = runner.NewExecutor(verbose)
+	}
 	return executor.Run(workflow, jobName, eventName)
 }

@@ -83,6 +83,36 @@ ici validate .github/workflows/test.yml
 ici validate workflow.yml --strict
 ```
 
+### Environment Variables & Secrets
+
+Store and manage secrets locally for use in workflows:
+
+```bash
+# Store a secret
+ici secrets set MY_API_KEY sk-api-key-12345
+
+# List all stored secrets
+ici secrets list
+
+# Remove a secret
+ici secrets remove MY_API_KEY
+
+# Run workflow with secrets (uses ~/.ici/secrets.json by default)
+ici run .github/workflows/test.yml
+
+# Use custom secrets file location
+ici run .github/workflows/test.yml --secrets ./my-secrets.json
+```
+
+Secrets are stored in plain text in `~/.ici/secrets.json` (read/write 0600 permissions). They are automatically injected as environment variables into your workflows. This allows you to:
+
+- Define workflow-level env vars: `env:` in the workflow YAML
+- Define job-level env vars: `env:` in the job
+- Define step-level env vars: `env:` in the step
+- Inject stored secrets as environment variables at runtime
+
+**Note:** Secrets are local to your machine and not synced with GitHub. They are useful for development/testing workflows locally.
+
 ## Project Structure
 
 ```
@@ -95,13 +125,16 @@ ici/
 │   │   ├── root.go       # Root command
 │   │   ├── run.go        # Run command
 │   │   ├── parse.go      # Parse command
-│   │   └── validate.go   # Validate command
+│   │   ├── validate.go   # Validate command
+│   │   └── secrets.go    # Secrets management command
 │   ├── parser/           # Workflow parsing
 │   │   └── workflow.go   # YAML parser & types
 │   ├── runner/           # Workflow execution
 │   │   └── executor.go   # Job & step execution
-│   └── container/        # Container management
-│       └── podman.go     # Podman integration
+│   ├── container/        # Container management
+│   │   └── podman.go     # Podman integration
+│   └── secrets/          # Secret storage
+│       └── store.go      # Local file-based secret store
 ├── go.mod
 └── README.md
 ```
@@ -126,16 +159,17 @@ go build -o ici ./cmd/ici
 ### Phase 1: Basic Runner (Current)
 - [x] CLI scaffolding
 - [x] Workflow parser
-- [ ] Basic step execution
-- [ ] Ubuntu container support
-- [ ] Simple run commands
+- [x] Basic step execution (run steps, output capture, timeouts, exit codes)
+- [x] Ubuntu container support
+- [x] Environment variables (workflow, job, step levels)
+- [x] Local secret management & injection
+- [x] Working directory support with container mounts
 
 ### Phase 2: Action Support
 - [ ] Action resolution
 - [ ] actions/checkout implementation
 - [ ] Action caching
-- [ ] Environment variables
-- [ ] Working directory support
+- [ ] Working directory in steps
 
 ### Phase 3: Advanced Features
 - [ ] Private repository support
