@@ -1,0 +1,387 @@
+package container
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+)
+
+// execCommand is a package-level variable so tests can override command execution.
+var execCommand = exec.Command
+
+// Manager handles Podman container operations
+type Manager struct {
+	verbose bool
+	cli     string // detected CLI: podman or docker
+}
+
+// NewManager creates a new container manager
+func NewManager(verbose bool) *Manager {
+	m := &Manager{
+		verbose: verbose,
+		cli:     "",
+	}
+	// detect available container CLI
+	if path, err := exec.LookPath("podman"); err == nil {
+		m.cli = path
+	} else if path, err := exec.LookPath("docker"); err == nil {
+		m.cli = path
+	}
+
+	return m
+}
+
+// MapRunsOn converts GitHub Actions runs-on to container images
+func (m *Manager) MapRunsOn(runsOn string) (string, error) {
+	// Map GitHub runners to container images
+	imageMap := map[string]string{
+		"ubuntu-latest": "ubuntu:22.04",
+		"ubuntu-22.04":  "ubuntu:22.04",
+		"ubuntu-20.04":  "ubuntu:20.04",
+		// TODO: Add more mappings
+	}
+
+	if image, ok := imageMap[runsOn]; ok {
+		return image, nil
+	}
+
+	return "", fmt.Errorf("unsupported runs-on: %s", runsOn)
+}
+
+// PullImage pulls the given image using the detected container CLI (podman or docker).
+// This is a convenience method exposed so callers can ensure images are available
+// before creating containers.
+func (m *Manager) PullImage(image string) error {
+	if m.verbose {
+		fmt.Printf("Pulling image: %s\n", image)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	if err := m.runCmdCapture(m.cli, "pull", image); err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", image, err)
+	}
+
+	return nil
+}
+
+// CreateContainer creates a new Podman (or Docker) container and returns its ID.
+// It pulls the image, creates the container (keeps it running) and starts it.
+func (m *Manager) CreateContainer(image string, name string) (string, error) {
+	if m.verbose {
+		fmt.Printf("Creating container: %s (image: %s)\n", name, image)
+	}
+	if m.cli == "" {
+		return "", errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// 1. Pull image
+	if err := m.PullImage(image); err != nil {
+		return "", err
+	}
+
+	// 2. Create container and capture returned container ID
+	out, err := m.runCmdOutput(m.cli, "create", "--name", name, image, "tail", "-f", "/dev/null")
+	if err != nil {
+		return "", fmt.Errorf("failed to create container %s from image %s: %w", name, image, err)
+	}
+	containerID := strings.TrimSpace(out)
+	if containerID == "" {
+		// Some CLIs may not print the ID; fall back to using the provided name
+		containerID = name
+	}
+
+	// 3. Start container
+	if err := m.runCmdCapture(m.cli, "start", containerID); err != nil {
+		// Attempt cleanup: remove container if start failed
+		_ = m.runCmdCapture(m.cli, "rm", "-f", containerID)
+		return "", fmt.Errorf("failed to start container %s: %w", containerID, err)
+	}
+
+	if m.verbose {
+		fmt.Printf("Container %s started (via %s)\n", containerID, m.cli)
+	}
+
+	return containerID, nil
+}
+
+// ContainerConfig holds options for creating a container with specific runtime
+// configuration. Fields are intentionally simple and map directly to common
+// CLI flags for Podman/Docker.
+type ContainerConfig struct {
+	// Env holds environment variables to set in the container (KEY=VALUE).
+	Env []string
+	// Volumes holds bind mounts in the form hostpath:containerpath[:ro|:rw]
+	Volumes []string
+	// WorkDir sets container working directory (-w)
+	WorkDir string
+	// User sets the user inside the container (--user)
+	User string
+}
+
+// CreateContainerWithConfig creates and starts a container using the provided
+// configuration options. It keeps the existing CreateContainer(image, name)
+// behavior intact; callers that don't need a config may continue using it.
+func (m *Manager) CreateContainerWithConfig(image string, name string, cfg *ContainerConfig) (string, error) {
+	if m.verbose {
+		fmt.Printf("Creating container with config: %s (image: %s)\n", name, image)
+	}
+	if m.cli == "" {
+		return "", errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// Pull image first
+	if err := m.PullImage(image); err != nil {
+		return "", err
+	}
+
+	// Build create args with configuration flags
+	args := []string{"create", "--name", name}
+
+	if cfg != nil {
+		for _, e := range cfg.Env {
+			// Use --env KEY=VALUE for portability
+			args = append(args, "--env", e)
+		}
+		for _, v := range cfg.Volumes {
+			args = append(args, "-v", v)
+		}
+		if cfg.WorkDir != "" {
+			args = append(args, "-w", cfg.WorkDir)
+		}
+		if cfg.User != "" {
+			args = append(args, "--user", cfg.User)
+		}
+	}
+
+	// Keep the container running by default
+	args = append(args, image, "tail", "-f", "/dev/null")
+
+	out, err := m.runCmdOutput(m.cli, args...)
+	if err != nil {
+		return "", fmt.Errorf("failed to create container %s from image %s: %w", name, image, err)
+	}
+	containerID := strings.TrimSpace(out)
+	if containerID == "" {
+		containerID = name
+	}
+
+	// Start
+	if err := m.runCmdCapture(m.cli, "start", containerID); err != nil {
+		_ = m.runCmdCapture(m.cli, "rm", "-f", containerID)
+		return "", fmt.Errorf("failed to start container %s: %w", containerID, err)
+	}
+
+	if m.verbose {
+		fmt.Printf("Container %s started (via %s) with config\n", containerID, m.cli)
+	}
+
+	return containerID, nil
+}
+
+// runCmdCapture runs a command and returns error with stderr/stdout combined on failure.
+func (m *Manager) runCmdCapture(name string, args ...string) error {
+	if m.verbose {
+		fmt.Printf("exec: %s %s\n", name, strings.Join(args, " "))
+	}
+	cmd := execCommand(name, args...)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(out.String() + "\n" + stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("command failed: %s %v: %s", name, args, msg)
+	}
+	return nil
+}
+
+// runCmdOutput runs a command and returns its stdout (trimmed). On error, stderr/stdout are included in the error.
+func (m *Manager) runCmdOutput(name string, args ...string) (string, error) {
+	if m.verbose {
+		fmt.Printf("exec: %s %s\n", name, strings.Join(args, " "))
+	}
+	cmd := execCommand(name, args...)
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(out.String() + "\n" + stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", fmt.Errorf("command failed: %s %v: %s", name, args, msg)
+	}
+	return out.String(), nil
+}
+
+// RunCommand executes a command in a container
+func (m *Manager) RunCommand(containerID string, command string) error {
+	if m.verbose {
+		fmt.Printf("Running command in %s: %s\n", containerID, command)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// Use `exec` to run the command inside the container. Use sh -lc to support complex commands.
+	// Stream stdout/stderr to the current process so callers see realtime output.
+	args := []string{"exec", "-i", containerID, "sh", "-lc", command}
+	if m.verbose {
+		fmt.Printf("exec: %s %s\n", m.cli, strings.Join(args, " "))
+	}
+
+	cmd := execCommand(m.cli, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	// No stdin wiring for now; could be added if needed
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to exec command in container %s: %w", containerID, err)
+	}
+
+	return nil
+}
+
+// RunCommandWithTimeout executes a command in a container and enforces an optional timeout (seconds).
+// If timeoutSeconds is 0, no timeout is enforced.
+func (m *Manager) RunCommandWithTimeout(containerID string, command string, timeoutSeconds int) error {
+	if m.verbose {
+		fmt.Printf("Running command in %s: %s (timeout: %d)\n", containerID, command, timeoutSeconds)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// Delegate to the more general method without env/workdir
+	return m.RunCommandWithOptions(containerID, command, nil, "", timeoutSeconds)
+}
+
+// RunCommandWithOptions executes a command in a container with optional env and working directory.
+// env is a slice of KEY=VALUE strings. workDir is the container-side working directory.
+func (m *Manager) RunCommandWithOptions(containerID string, command string, env []string, workDir string, timeoutSeconds int) error {
+	if m.verbose {
+		fmt.Printf("Running command in %s: %s (workdir: %s, env: %v, timeout: %d)\n", containerID, command, workDir, env, timeoutSeconds)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// Build exec args. Use --env KEY=VALUE for each env entry and -w for working directory if provided.
+	args := []string{"exec", "-i"}
+	for _, e := range env {
+		args = append(args, "--env", e)
+	}
+	if workDir != "" {
+		args = append(args, "-w", workDir)
+	}
+	args = append(args, containerID, "sh", "-lc", command)
+
+	if m.verbose {
+		fmt.Printf("exec: %s %s\n", m.cli, strings.Join(args, " "))
+	}
+
+	cmd := execCommand(m.cli, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if timeoutSeconds <= 0 {
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to exec command in container %s: %w", containerID, err)
+		}
+		return nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start exec in container %s: %w", containerID, err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("command failed in container %s: %w", containerID, err)
+		}
+		return nil
+	case <-time.After(time.Duration(timeoutSeconds) * time.Second):
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		<-done
+		return fmt.Errorf("command timed out after %d seconds in container %s", timeoutSeconds, containerID)
+	}
+}
+
+// SetCLI allows overriding the detected container CLI (useful in tests)
+func (m *Manager) SetCLI(cli string) {
+	m.cli = cli
+}
+
+// RemoveContainer removes a Podman container
+func (m *Manager) RemoveContainer(containerID string) error {
+	if m.verbose {
+		fmt.Printf("Removing container: %s\n", containerID)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	// Attempt to stop the container; ignore error if it is already stopped
+	_ = m.runCmdCapture(m.cli, "stop", containerID)
+
+	// Remove the container forcefully
+	if err := m.runCmdCapture(m.cli, "rm", "-f", containerID); err != nil {
+		return fmt.Errorf("failed to remove container %s: %w", containerID, err)
+	}
+
+	if m.verbose {
+		fmt.Printf("Container %s removed\n", containerID)
+	}
+
+	return nil
+}
+
+// StartContainer starts an existing container by ID or name.
+func (m *Manager) StartContainer(containerID string) error {
+	if m.verbose {
+		fmt.Printf("Starting container: %s\n", containerID)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	if err := m.runCmdCapture(m.cli, "start", containerID); err != nil {
+		return fmt.Errorf("failed to start container %s: %w", containerID, err)
+	}
+
+	return nil
+}
+
+// StopContainer stops a running container by ID or name.
+func (m *Manager) StopContainer(containerID string) error {
+	if m.verbose {
+		fmt.Printf("Stopping container: %s\n", containerID)
+	}
+	if m.cli == "" {
+		return errors.New("no container CLI found: please install podman or docker")
+	}
+
+	if err := m.runCmdCapture(m.cli, "stop", containerID); err != nil {
+		return fmt.Errorf("failed to stop container %s: %w", containerID, err)
+	}
+
+	return nil
+}
